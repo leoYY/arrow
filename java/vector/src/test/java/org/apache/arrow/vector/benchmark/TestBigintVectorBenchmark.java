@@ -1,5 +1,6 @@
 package org.apache.arrow.vector.benchmark;
 
+import io.netty.buffer.ArrowBuf;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.BigIntVector;
@@ -16,6 +17,7 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
+import java.nio.ByteBuffer;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
@@ -29,6 +31,8 @@ public class TestBigintVectorBenchmark {
     private static long[] smallLongArr = new long[1024];
 
     private static int[] readIndex = new int[1024];
+    private static ByteBuffer midheapByteBuffer = ByteBuffer.allocate(1024 * 1024 * Long.BYTES);
+    private static ByteBuffer midDirectByteBuffer = ByteBuffer.allocateDirect(1024 * 1024 * Long.BYTES);
 
     private static long[] midLongArr = new long[1024 * 1024];
     //private static long[] bigLongArr = new long[1024 * 1024 * 1024];
@@ -60,10 +64,37 @@ public class TestBigintVectorBenchmark {
             if (i < midLongArr.length) {
                 midLongArr[i] = rl;
                 midVector.set(i, rl);
+                midheapByteBuffer.putLong(i, rl);
+                midDirectByteBuffer.putLong(i, rl);
             }
             //bigLongArr[i] = rl;
             //bigVector.set(i, rl);
 
+        }
+    }
+
+    @Benchmark
+    public static void testMidDirectBytebufSequenceWrite(Blackhole hole) {
+        int len = midLongArr.length;
+        for (int i = 0; i < len; ++i) {
+            midDirectByteBuffer.putLong(i, i);
+        }
+        hole.consume(midDirectByteBuffer);
+    }
+
+    @Benchmark
+    public static void testMidDirectBytebufSequenceRead(Blackhole hole) {
+        int len = midLongArr.length;
+        for (int i = 0; i < len; ++i) {
+            hole.consume(midDirectByteBuffer.getLong(i));
+        }
+    }
+
+    @Benchmark
+    public static void testMidHeapBytebufSequenceRead(Blackhole hole) {
+        int len = midLongArr.length;
+        for (int i = 0; i < len; ++i) {
+            hole.consume(midheapByteBuffer.getLong(i));
         }
     }
 
@@ -82,10 +113,21 @@ public class TestBigintVectorBenchmark {
     }
 
     @Benchmark
+    public static void testMidArrowBufSequenceRead(Blackhole hole) {
+        int len = midVector.getValueCapacity();
+        ArrowBuf buf = midVector.getDataBuffer();
+        for (int i = 0; i < len; ++i) {
+            hole.consume(buf.getLong(i));
+        }
+    }
+
+    @Benchmark
     public static void testMidVectorSequenceWrite(Blackhole hole) {
         int len = midVector.getValueCapacity();
+        //ArrowBuf buf = midVector.getDataBuffer();
         for (int i = 0; i < len; ++i) {
             midVector.set(i, i);
+            //buf.setLong(i, i);
         }
         hole.consume(midVector);
     }
